@@ -253,6 +253,49 @@ async function warmupCookies(cookieJar) {
 }
 
 async function getDemoLink(gameId, retries = 5, backoffMs = 750) {
+  function looksLikeGameUrl(s) {
+    return (
+      typeof s === "string" &&
+      /^https?:\/\//i.test(s) &&
+      /(openGame\.do|html5Game\.do|gs2c)/i.test(s)
+    );
+  }
+
+  function findGameUrlDeep(node, depth = 0) {
+    if (depth > 8 || node == null) return null;
+    if (looksLikeGameUrl(node)) return node;
+    if (typeof node === "object") {
+      if (Array.isArray(node)) {
+        for (const v of node) {
+          const hit = findGameUrlDeep(v, depth + 1);
+          if (hit) return hit;
+        }
+        return null;
+      }
+      for (const [k, v] of Object.entries(node)) {
+        if (
+          typeof v === "string" &&
+          /(^|_)(link|url|gameurl|launchurl)(_|$)/i.test(k) &&
+          looksLikeGameUrl(v)
+        ) {
+          return v;
+        }
+      }
+      for (const v of Object.values(node)) {
+        const hit = findGameUrlDeep(v, depth + 1);
+        if (hit) return hit;
+      }
+    }
+    return null;
+  }
+
+  function findGameUrlInText(txt) {
+    const re =
+      /https?:\/\/[^\s"'<>]+(?:openGame\.do|html5Game\.do|gs2c)[^\s"'<>]*/i;
+    const m = txt.match(re);
+    return m ? m[0] : null;
+  }
+
   const cookieJar = new SimpleCookieJar();
   await warmupCookies(cookieJar);
 
@@ -278,11 +321,30 @@ async function getDemoLink(gameId, retries = 5, backoffMs = 750) {
         },
       });
       const txt = await res.body.text();
-      const j = JSON.parse(txt);
-      if (j && typeof j.link === "string" && j.link) {
-        return j.link;
+      let parsed;
+      try {
+        parsed = JSON.parse(txt);
+      } catch (_) {
+        parsed = null;
       }
-      lastErr = "Demo link not found in response";
+
+      const direct =
+        parsed && typeof parsed.link === "string" ? parsed.link : null;
+      if (looksLikeGameUrl(direct)) return direct;
+
+      const deep = findGameUrlDeep(parsed);
+      if (deep) return deep;
+
+      const textHit = findGameUrlInText(txt);
+      if (textHit) {
+        return textHit;
+      }
+
+      // Keep a compact response preview for hosted-debugging (e.g. geo/anti-bot payloads).
+      const sample = String(txt || "")
+        .slice(0, 220)
+        .replace(/\s+/g, " ");
+      lastErr = `Demo link not found in response (status=${res.statusCode}, sample=${JSON.stringify(sample)})`;
     } catch (e) {
       lastErr = e && e.message ? e.message : String(e);
     }
