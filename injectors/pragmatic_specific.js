@@ -22,7 +22,9 @@
       return (hasCurrency ? "$" : "") + s;
     }
 
-    const s = Math.round(v).toLocaleString("en-US", {
+    // In no-currency mode Pragmatic shows values in credits (x10 of dollar amount).
+    const credits = v * 10;
+    const s = Math.round(credits).toLocaleString("en-US", {
       minimumFractionDigits: 0,
       maximumFractionDigits: 0,
     });
@@ -52,6 +54,11 @@
   function remapLargeNumber(value) {
     if (typeof value !== "number" || !Number.isFinite(value)) return value;
     if (value < MIN_REPLACE_VALUE) return value;
+
+    // Large integer credit displays (e.g. 1,000,000) are in credits (x10).
+    if (value >= 300000) return Number(melBetBalance) * 10;
+
+    // Currency-like large numbers (e.g. 100,000.00 pipeline) map directly.
     return Number(melBetBalance);
   }
 
