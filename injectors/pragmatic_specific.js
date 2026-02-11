@@ -166,12 +166,23 @@
 
   function rewriteKnownStringProps(obj) {
     if (!obj || typeof obj !== "object") return;
-    const keys = ["text", "_text", "label", "value", "displayText", "content"];
-    for (const key of keys) {
+
+    const textKeys = ["text", "_text", "label", "value", "displayText", "content"];
+    for (const key of textKeys) {
       try {
         if (typeof obj[key] === "string") {
           const nv = replaceLargeNumbers(obj[key]);
           if (nv !== obj[key]) obj[key] = nv;
+        }
+      } catch (e) {}
+    }
+
+    // Some wrappers keep numeric balances in plain fields and format later.
+    const numericKeys = ["balance", "credit", "currentBalance", "displayBalance", "walletBalance"];
+    for (const key of numericKeys) {
+      try {
+        if (typeof obj[key] === "number" && Number.isFinite(obj[key]) && obj[key] >= MIN_REPLACE_VALUE) {
+          obj[key] = Number(melBetBalance);
         }
       } catch (e) {}
     }
@@ -184,24 +195,34 @@
     } catch (e) {}
   }
 
-  function patchUILabel() {
-    const UILabel = window.UILabel;
-    if (!UILabel || !UILabel.prototype) return;
-    if (UILabel.prototype._melBetUILabelPatched) return;
-    UILabel.prototype._melBetUILabelPatched = true;
+  let UILabelPatchedLogged = false;
 
-    if (typeof UILabel.prototype.processPixiText === "function") {
-      const orig = UILabel.prototype.processPixiText;
-      UILabel.prototype.processPixiText = function (...args) {
-        const patchedArgs = args.map((arg) =>
-          typeof arg === "string" ? replaceLargeNumbers(arg) : arg
-        );
+  function wrapProcessPixiText(holder) {
+    if (!holder) return;
+    try {
+      const orig = holder.processPixiText;
+      if (typeof orig !== "function" || orig._melBetWrapped) return;
+
+      const wrapped = function (...args) {
+        const patchedArgs = args.map((arg) => (typeof arg === "string" ? replaceLargeNumbers(arg) : arg));
         const out = orig.apply(this, patchedArgs);
         rewriteKnownStringProps(this);
         return out;
       };
-      console.log("[Pragmatic Display] UILabel.processPixiText patched");
-    }
+      wrapped._melBetWrapped = true;
+      holder.processPixiText = wrapped;
+
+      if (!UILabelPatchedLogged) {
+        UILabelPatchedLogged = true;
+        console.log("[Pragmatic Display] processPixiText patched on runtime object/prototype");
+      }
+    } catch (e) {}
+  }
+
+  function patchUILabel() {
+    const UILabel = window.UILabel;
+    if (!UILabel || !UILabel.prototype) return;
+    wrapProcessPixiText(UILabel.prototype);
   }
 
   function tryPatchPIXI() {
@@ -219,10 +240,17 @@
     const visited = new Set();
 
     function walk(node, depth) {
-      if (!node || typeof node !== "object" || depth > 10 || visited.has(node)) return;
+      if (!node || typeof node !== "object" || depth > 9 || visited.has(node)) return;
       visited.add(node);
 
       rewriteKnownStringProps(node);
+
+      // Patch runtime instance methods/prototypes even when class is not global.
+      wrapProcessPixiText(node);
+      try {
+        const proto = Object.getPrototypeOf(node);
+        if (proto) wrapProcessPixiText(proto);
+      } catch (e) {}
 
       try {
         const children = node.children;
@@ -238,7 +266,7 @@
 
   tryPatchPIXI();
   setInterval(tryPatchPIXI, 300);
-  setInterval(sweepPIXIObjects, 150);
+  setInterval(sweepPIXIObjects, 120);
 
   // 4) DOM text interception (for any HTML overlays)
   function walkAndReplaceText(root) {
