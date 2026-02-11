@@ -122,7 +122,7 @@
     }
   } catch (e) {}
 
-  // 2) PIXI Text / BitmapText interception (commonly used for CREDIT toggle)
+  // 2) PIXI Text / BitmapText interception
   function patchPixiTextClass(Cls) {
     if (!Cls || !Cls.prototype) return;
     if (Cls.prototype._melBetTextPatched) return;
@@ -164,6 +164,46 @@
     }
   }
 
+  function rewriteKnownStringProps(obj) {
+    if (!obj || typeof obj !== "object") return;
+    const keys = ["text", "_text", "label", "value", "displayText", "content"];
+    for (const key of keys) {
+      try {
+        if (typeof obj[key] === "string") {
+          const nv = replaceLargeNumbers(obj[key]);
+          if (nv !== obj[key]) obj[key] = nv;
+        }
+      } catch (e) {}
+    }
+
+    try {
+      if (obj.pixiText && typeof obj.pixiText.text === "string") {
+        const nv = replaceLargeNumbers(obj.pixiText.text);
+        if (nv !== obj.pixiText.text) obj.pixiText.text = nv;
+      }
+    } catch (e) {}
+  }
+
+  function patchUILabel() {
+    const UILabel = window.UILabel;
+    if (!UILabel || !UILabel.prototype) return;
+    if (UILabel.prototype._melBetUILabelPatched) return;
+    UILabel.prototype._melBetUILabelPatched = true;
+
+    if (typeof UILabel.prototype.processPixiText === "function") {
+      const orig = UILabel.prototype.processPixiText;
+      UILabel.prototype.processPixiText = function (...args) {
+        const patchedArgs = args.map((arg) =>
+          typeof arg === "string" ? replaceLargeNumbers(arg) : arg
+        );
+        const out = orig.apply(this, patchedArgs);
+        rewriteKnownStringProps(this);
+        return out;
+      };
+      console.log("[Pragmatic Display] UILabel.processPixiText patched");
+    }
+  }
+
   function tryPatchPIXI() {
     const PIXI = window.PIXI;
     if (!PIXI) return;
@@ -171,12 +211,36 @@
     patchPixiTextClass(PIXI.Text);
     patchPixiTextClass(PIXI.BitmapText);
     if (PIXI.extras && PIXI.extras.BitmapText) patchPixiTextClass(PIXI.extras.BitmapText);
+    patchUILabel();
+  }
+
+  // 3) Live sweep of scene objects to catch custom wrappers that bypass setters.
+  function sweepPIXIObjects() {
+    const visited = new Set();
+
+    function walk(node, depth) {
+      if (!node || typeof node !== "object" || depth > 10 || visited.has(node)) return;
+      visited.add(node);
+
+      rewriteKnownStringProps(node);
+
+      try {
+        const children = node.children;
+        if (children && children.length) {
+          for (const child of children) walk(child, depth + 1);
+        }
+      } catch (e) {}
+    }
+
+    const roots = [window, window.Game, window.game, window.Runtime, window.runtime, window.PIXI];
+    for (const root of roots) walk(root, 0);
   }
 
   tryPatchPIXI();
-  setInterval(tryPatchPIXI, 500);
+  setInterval(tryPatchPIXI, 300);
+  setInterval(sweepPIXIObjects, 150);
 
-  // 3) DOM text interception (for any HTML overlays)
+  // 4) DOM text interception (for any HTML overlays)
   function walkAndReplaceText(root) {
     if (!root) return;
     const walker = document.createTreeWalker(root, NodeFilter.SHOW_TEXT);
