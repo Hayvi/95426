@@ -9,17 +9,26 @@
   // Avoid touching buy/bet/win UI numbers like 2,000 / 10,000.
   // Pragmatic demo credits are typically 100,000+ (often 1,000,000).
   const MIN_REPLACE_VALUE = 30000;
+  const DISPLAY_CURRENCY = "TND";
+
+  function normalizeCurrencyText(text) {
+    if (typeof text !== "string") return text;
+    return text
+      .replace(/\bUSD\b/gi, DISPLAY_CURRENCY)
+      .replace(/\$/g, DISPLAY_CURRENCY + " ");
+  }
 
   function formatBalance(hasDecimals, hasCurrency) {
     const v = Number(melBetBalance);
     if (!Number.isFinite(v)) return null;
+    const prefix = hasCurrency ? DISPLAY_CURRENCY + " " : "";
 
     if (hasDecimals) {
       const s = v.toLocaleString("en-US", {
         minimumFractionDigits: 2,
         maximumFractionDigits: 2,
       });
-      return (hasCurrency ? "$" : "") + s;
+      return prefix + s;
     }
 
     // In no-currency mode Pragmatic shows values in credits (x10 of dollar amount).
@@ -28,7 +37,7 @@
       minimumFractionDigits: 0,
       maximumFractionDigits: 0,
     });
-    return (hasCurrency ? "$" : "") + s;
+    return prefix + s;
   }
 
   function replaceLargeNumbers(text) {
@@ -36,21 +45,23 @@
 
     // Matches:
     // - $1,000,000.00
+    // - USD 1,000,000.00
     // - 1000000
     // - 1,000,000
     // - 399,998.50
-    const re = /(\$?)(\d{1,3}(?:,\d{3})*|\d+)(?:\.(\d{2}))?/g;
+    const re = /(\$|\bUSD\b)?\s*(\d{1,3}(?:,\d{3})*|\d+)(?:\.(\d{2}))?/gi;
 
-    return text.replace(re, (match, dollar, whole, decimal) => {
+    const replaced = text.replace(re, (match, currency, whole, decimal) => {
       const numValue = parseFloat(
         whole.replace(/,/g, "") + (decimal ? "." + decimal : ""),
       );
       if (!Number.isFinite(numValue)) return match;
       if (numValue < MIN_REPLACE_VALUE) return match;
 
-      const out = formatBalance(Boolean(decimal), Boolean(dollar));
+      const out = formatBalance(Boolean(decimal), Boolean(currency));
       return out || match;
     });
+    return normalizeCurrencyText(replaced);
   }
 
   function remapLargeNumber(value) {
