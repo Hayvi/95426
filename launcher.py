@@ -104,10 +104,14 @@ def _get_demo_link(game_id: int, retries: int = 5, backoff_s: float = 0.75) -> s
 
 class Wallet:
     def __init__(self, initial_balance: float = 1000.0):
-        self.balance = initial_balance
+        self.balance = max(0.0, float(initial_balance))
 
     def update(self, amount: float):
-        self.balance = amount
+        v = float(amount)
+        if not (v == v) or v == float("inf") or v == float("-inf"):
+            return self.balance
+        self.balance = max(0.0, v)
+        return self.balance
 
 
 def _b64url_encode(s: str) -> str:
@@ -245,6 +249,16 @@ def create_server(host: str, port: int, initial_balance: float, inject_scripts):
         header button {{ padding: 6px 10px; border-radius: 6px; border: 1px solid #333; background: #1b1b1b; color: #fff; cursor: pointer; }}
         header button:hover {{ background: #222; }}
         iframe {{ width: 100vw; height: calc(100vh - 44px); border: 0; }}
+        #spinLock {{
+            position: fixed;
+            right: 0;
+            bottom: 0;
+            width: 420px;
+            height: 240px;
+            z-index: 2147483646;
+            pointer-events: none;
+            background: transparent;
+        }}
         .spacer {{ flex: 1 1 auto; }}
         .muted {{ opacity: .75; }}
     </style>
@@ -260,6 +274,7 @@ def create_server(host: str, port: int, initial_balance: float, inject_scripts):
         <span id="balMsg" class="muted"></span>
     </header>
     <iframe id="gameFrame" src="{iframe_src}" allowfullscreen></iframe>
+    <div id="spinLock" aria-hidden="true"></div>
     <script>
         let walletBalance = {wallet.balance};
         let lastGameBalance = null;
@@ -267,6 +282,12 @@ def create_server(host: str, port: int, initial_balance: float, inject_scripts):
         const balInput = document.getElementById('bal');
         const balMsg = document.getElementById('balMsg');
         const gameFrame = document.getElementById('gameFrame');
+        const spinLock = document.getElementById('spinLock');
+
+        function updateSpinLock() {{
+            // Block spin area when wallet is empty/negative.
+            spinLock.style.pointerEvents = walletBalance <= 0 ? 'auto' : 'none';
+        }}
 
         function broadcastBalance(val) {{
             try {{
@@ -287,18 +308,29 @@ def create_server(host: str, port: int, initial_balance: float, inject_scripts):
                     walletBalance = j.balance;
                     balInput.value = walletBalance.toFixed(2);
                     broadcastBalance(walletBalance);
+                    updateSpinLock();
                 }}
             }} catch (e) {{}}
         }}
 
         async function syncWallet(newBalance) {{
             try {{
-                await fetch('/api/wallet/sync', {{
+                const r = await fetch('/api/wallet/sync', {{
                     method: 'POST',
                     headers: {{ 'Content-Type': 'application/json' }},
                     body: JSON.stringify({{ balance: newBalance }})
                 }});
-                broadcastBalance(newBalance);
+                const j = await r.json();
+                if (j && typeof j.balance === 'number') {{
+                    walletBalance = j.balance;
+                }} else {{
+                    walletBalance = Math.max(0, Number(newBalance) || 0);
+                }}
+                if (document.activeElement !== balInput) {{
+                    balInput.value = walletBalance.toFixed(2);
+                }}
+                broadcastBalance(walletBalance);
+                updateSpinLock();
             }} catch (e) {{ console.error("Failed to sync wallet", e); }}
         }}
 
@@ -306,6 +338,10 @@ def create_server(host: str, port: int, initial_balance: float, inject_scripts):
             const v = parseFloat((balInput.value || '').toString().replace(/,/g, ''));
             if (!Number.isFinite(v)) {{
                 setMsg('Invalid number');
+                return;
+            }}
+            if (v < 0) {{
+                setMsg('Balance cannot be negative');
                 return;
             }}
             walletBalance = v;
@@ -332,11 +368,12 @@ def create_server(host: str, port: int, initial_balance: float, inject_scripts):
                         const delta = gameVal - lastGameBalance;
                         lastGameBalance = gameVal;
                         if (delta !== 0) {{
-                            walletBalance += delta;
+                            walletBalance = Math.max(0, walletBalance + delta);
                             syncWallet(walletBalance);
                             if (document.activeElement !== balInput) {{
                                 balInput.value = walletBalance.toFixed(2);
                             }}
+                            updateSpinLock();
                         }}
                     }}
                 }}
