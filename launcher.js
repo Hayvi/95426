@@ -659,8 +659,6 @@ async function main() {
     string: ["host", "inject"],
     default: {
       balance: 1000,
-      host: "127.0.0.1",
-      port: 8000,
     },
     alias: {
       h: "host",
@@ -687,11 +685,18 @@ async function main() {
 
   const useProxy = args.direct ? false : true;
   const scripts = useProxy ? injectScripts : [];
+  const isRender = Boolean(process.env.RENDER);
+  const host = String(args.host || (isRender ? "0.0.0.0" : "127.0.0.1"));
+  const port = Number(args.port || process.env.PORT || 8000);
+  if (!Number.isFinite(port) || port <= 0) {
+    console.error(`Fatal: invalid port '${args.port || process.env.PORT}'`);
+    process.exit(1);
+  }
 
   try {
     await createServer({
-      host: String(args.host),
-      port: Number(args.port),
+      host,
+      port,
       initialBalance: Number(args.balance),
       injectScripts: scripts,
       useProxy,
