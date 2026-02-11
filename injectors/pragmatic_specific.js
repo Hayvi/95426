@@ -49,6 +49,12 @@
     });
   }
 
+  function remapLargeNumber(value) {
+    if (typeof value !== "number" || !Number.isFinite(value)) return value;
+    if (value < MIN_REPLACE_VALUE) return value;
+    return Number(melBetBalance);
+  }
+
   const frameInfo =
     window === window.top ? "TOP FRAME" : "IFRAME: " + window.location.href.substring(0, 50);
   console.log("[Pragmatic Display] init in", frameInfo);
@@ -139,6 +145,7 @@
           },
           set: function (v) {
             if (typeof v === "string") v = replaceLargeNumbers(v);
+            else v = remapLargeNumber(v);
             return desc.set.call(this, v);
           },
         });
@@ -149,6 +156,7 @@
       const orig = Cls.prototype.setText;
       Cls.prototype.setText = function (v) {
         if (typeof v === "string") v = replaceLargeNumbers(v);
+        else v = remapLargeNumber(v);
         return orig.call(this, v);
       };
     }
@@ -204,7 +212,10 @@
       if (typeof orig !== "function" || orig._melBetWrapped) return;
 
       const wrapped = function (...args) {
-        const patchedArgs = args.map((arg) => (typeof arg === "string" ? replaceLargeNumbers(arg) : arg));
+        const patchedArgs = args.map((arg) => {
+          if (typeof arg === "string") return replaceLargeNumbers(arg);
+          return remapLargeNumber(arg);
+        });
         const out = orig.apply(this, patchedArgs);
         rewriteKnownStringProps(this);
         return out;
