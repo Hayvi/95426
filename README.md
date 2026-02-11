@@ -13,9 +13,9 @@ A standalone launcher for Sweet Bonanza 1000 (Game ID: 95426) with virtual walle
 
 ## Installation
 
-1. Install Python dependencies:
+1. Install Node dependencies:
 ```bash
-pip install -r requirements.txt
+npm install
 ```
 
 ## Usage
@@ -23,19 +23,19 @@ pip install -r requirements.txt
 This launcher runs with **no Playwright** and **no browser extension**. It serves the game through a local reverse proxy and injects the interceptor JS server-side.
 
 ```bash
-python3 launcher.py --balance 1000
+node launcher.js --balance 1000
 ```
 
 (`--proxy` is optional; proxy mode is the default.)
 
 Change host/port:
 ```bash
-python3 launcher.py --proxy --host 127.0.0.1 --port 8000 --balance 1000
+node launcher.js --proxy --host 127.0.0.1 --port 8000 --balance 1000
 ```
 
 Inject a different script (repeat `--inject` to inject multiple files, in order):
 ```bash
-python3 launcher.py --proxy --inject injectors/canvas_interceptor.js --balance 1000
+node launcher.js --proxy --inject injectors/canvas_interceptor.js --balance 1000
 ```
 
 ### Debug: Direct (No Proxy / No Injection)
@@ -43,12 +43,12 @@ python3 launcher.py --proxy --inject injectors/canvas_interceptor.js --balance 1
 Opens the game directly (the game will not be intercepted).
 
 ```bash
-python3 launcher.py --direct --balance 1000
+node launcher.js --direct --balance 1000
 ```
 
 ## How It Works
 
-1. The launcher starts a local HTTP server with a virtual wallet
+1. The launcher starts a local Fastify HTTP server with a virtual wallet
 2. Fetches the demo game URL from MelBet API
 3. Serves the game through a local `/p/<token>/...` reverse proxy and injects the interceptor JS server-side
 4. The injected script intercepts multiple JavaScript primitives (`toLocaleString`, `toString`, `toFixed`) to replace the game's internal demo balance with your custom wallet balance
@@ -59,7 +59,7 @@ You can edit the wallet balance live using the input in the top bar while the ga
 
 ## Files
 
-- `launcher.py` - Main launcher script
+- `launcher.js` - Main Fastify launcher script
 - `injectors/` - JS interceptors injected into proxied HTML
   - `pragmatic_specific.js` - Advanced interception for Pragmatic Play (supports currency/credit toggling)
   - `canvas_interceptor.js` - Alternative canvas interception

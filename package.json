@@ -1,0 +1,17 @@
+{
+  "name": "sweet-bonanza-95426",
+  "version": "1.0.0",
+  "private": true,
+  "description": "Sweet Bonanza 1000 launcher with Fastify proxy injection",
+  "main": "launcher.js",
+  "scripts": {
+    "start": "node launcher.js"
+  },
+  "dependencies": {
+    "fastify": "^5.1.0",
+    "fastify-raw-body": "^5.0.0",
+    "minimist": "^1.2.8",
+    "set-cookie-parser": "^2.7.1",
+    "undici": "^7.13.0"
+  }
+}
