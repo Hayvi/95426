@@ -62,6 +62,55 @@
     return Number(melBetBalance);
   }
 
+  function mapLargeValueForDisplay(value, options) {
+    if (typeof value !== "number" || !Number.isFinite(value)) return value;
+    if (value < MIN_REPLACE_VALUE) return value;
+
+    const minFd = options && typeof options.minimumFractionDigits === "number"
+      ? options.minimumFractionDigits
+      : undefined;
+    const maxFd = options && typeof options.maximumFractionDigits === "number"
+      ? options.maximumFractionDigits
+      : undefined;
+    const hasDecimals = (minFd !== undefined && minFd > 0) || (maxFd !== undefined && maxFd > 0);
+
+    if (hasDecimals) return Number(melBetBalance);
+    return Number(melBetBalance) * 10;
+  }
+
+  // Catch formatting paths that bypass text setters (e.g. CREDIT toggle mode).
+  try {
+    if (!Number.prototype._melBetToLocalePatched) {
+      Number.prototype._melBetToLocalePatched = true;
+      const originalToLocaleString = Number.prototype.toLocaleString;
+      Number.prototype.toLocaleString = function (locales, options) {
+        const mapped = mapLargeValueForDisplay(Number(this.valueOf()), options);
+        return originalToLocaleString.call(mapped, locales, options);
+      };
+    }
+  } catch (e) {}
+
+  try {
+    if (!Intl.NumberFormat.prototype._melBetFormatPatched) {
+      Intl.NumberFormat.prototype._melBetFormatPatched = true;
+      const originalFormatGetter = Object.getOwnPropertyDescriptor(
+        Intl.NumberFormat.prototype,
+        "format"
+      ).get;
+      Object.defineProperty(Intl.NumberFormat.prototype, "format", {
+        configurable: true,
+        get: function () {
+          const formatter = originalFormatGetter.call(this);
+          const resolved = this.resolvedOptions ? this.resolvedOptions() : {};
+          return function (value) {
+            const mapped = mapLargeValueForDisplay(Number(value), resolved);
+            return formatter(mapped);
+          };
+        },
+      });
+    }
+  } catch (e) {}
+
   const frameInfo =
     window === window.top ? "TOP FRAME" : "IFRAME: " + window.location.href.substring(0, 50);
   console.log("[Pragmatic Display] init in", frameInfo);
@@ -225,6 +274,8 @@
         });
         const out = orig.apply(this, patchedArgs);
         rewriteKnownStringProps(this);
+        if (typeof out === "string") return replaceLargeNumbers(out);
+        if (typeof out === "number") return remapLargeNumber(out);
         return out;
       };
       wrapped._melBetWrapped = true;
