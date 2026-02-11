@@ -1,10 +1,10 @@
-// Pragmatic Play Specific Interceptor - Canvas + PIXI Text override
-// Must run before game loads.
+// Pragmatic Play Specific Interceptor - display override
+// Must run before game loads. Works in iframes.
 
 (function () {
   "use strict";
 
-  let melBetBalance = 500.0; // Default, will be updated from API/messages
+  let melBetBalance = 500.0; // Updated from /api/wallet/balance or postMessage
 
   // Avoid touching buy/bet/win UI numbers like 2,000 / 10,000.
   // Pragmatic demo credits are typically 100,000+ (often 1,000,000).
@@ -22,7 +22,6 @@
       return (hasCurrency ? "$" : "") + s;
     }
 
-    // When the game toggles to a no-currency/no-decimals view, keep it integer.
     const s = Math.round(v).toLocaleString("en-US", {
       minimumFractionDigits: 0,
       maximumFractionDigits: 0,
@@ -50,17 +49,16 @@
     });
   }
 
-  // Identify which frame we're in
   const frameInfo =
     window === window.top ? "TOP FRAME" : "IFRAME: " + window.location.href.substring(0, 50);
-  console.log("[Pragmatic Canvas] EARLY INIT in", frameInfo);
+  console.log("[Pragmatic Display] init in", frameInfo);
 
-  // Fetch balance from wallet API (top frame only)
+  // Balance source
   async function fetchBalanceFromAPI() {
     try {
       const res = await fetch("/api/wallet/balance");
       const data = await res.json();
-      if (data.balance !== undefined) {
+      if (data && data.balance !== undefined) {
         melBetBalance = data.balance;
         // Broadcast to iframes
         document.querySelectorAll("iframe").forEach((iframe) => {
@@ -72,9 +70,7 @@
           } catch (e) {}
         });
       }
-    } catch (e) {
-      // ignore
-    }
+    } catch (e) {}
   }
 
   if (window === window.top) {
@@ -82,7 +78,14 @@
     setTimeout(fetchBalanceFromAPI, 100);
   }
 
-  // Canvas interception (covers some UIs).
+  window.addEventListener("message", (e) => {
+    if (e.data && e.data.type === "MELBET_BALANCE_UPDATE") {
+      const v = parseFloat(e.data.balance);
+      if (Number.isFinite(v)) melBetBalance = v;
+    }
+  });
+
+  // 1) Canvas 2D text interception
   const originalGetContext = HTMLCanvasElement.prototype.getContext;
   HTMLCanvasElement.prototype.getContext = function (contextType, ...args) {
     const context = originalGetContext.call(this, contextType, ...args);
@@ -104,7 +107,6 @@
     return context;
   };
 
-  // Also intercept prototype directly (covers contexts created before patching getContext).
   try {
     const proto = CanvasRenderingContext2D.prototype;
     if (!proto._melBetProtoPatched) {
@@ -120,13 +122,12 @@
     }
   } catch (e) {}
 
-  // PIXI interception (Sweet Bonanza is commonly PIXI/WebGL; clicking CREDIT often switches to BitmapText).
+  // 2) PIXI Text / BitmapText interception (commonly used for CREDIT toggle)
   function patchPixiTextClass(Cls) {
     if (!Cls || !Cls.prototype) return;
     if (Cls.prototype._melBetTextPatched) return;
     Cls.prototype._melBetTextPatched = true;
 
-    // Patch text setter if it exists.
     try {
       const desc = Object.getOwnPropertyDescriptor(Cls.prototype, "text");
       if (desc && typeof desc.set === "function" && typeof desc.get === "function") {
@@ -144,7 +145,6 @@
       }
     } catch (e) {}
 
-    // Patch setText if present.
     if (typeof Cls.prototype.setText === "function") {
       const orig = Cls.prototype.setText;
       Cls.prototype.setText = function (v) {
@@ -153,7 +153,6 @@
       };
     }
 
-    // Some versions use updateText with internal _text.
     if (typeof Cls.prototype.updateText === "function") {
       const origUpdate = Cls.prototype.updateText;
       Cls.prototype.updateText = function () {
@@ -167,24 +166,67 @@
 
   function tryPatchPIXI() {
     const PIXI = window.PIXI;
-    if (!PIXI) return false;
+    if (!PIXI) return;
 
     patchPixiTextClass(PIXI.Text);
     patchPixiTextClass(PIXI.BitmapText);
-
-    return true;
+    if (PIXI.extras && PIXI.extras.BitmapText) patchPixiTextClass(PIXI.extras.BitmapText);
   }
 
-  // Try immediately, then keep trying as scripts load.
   tryPatchPIXI();
   setInterval(tryPatchPIXI, 500);
 
-  // Listen for balance updates from parent frame
-  window.addEventListener("message", (e) => {
-    if (e.data && e.data.type === "MELBET_BALANCE_UPDATE") {
-      melBetBalance = parseFloat(e.data.balance) || 500;
+  // 3) DOM text interception (for any HTML overlays)
+  function walkAndReplaceText(root) {
+    if (!root) return;
+    const walker = document.createTreeWalker(root, NodeFilter.SHOW_TEXT);
+    let n;
+    while ((n = walker.nextNode())) {
+      const v = n.nodeValue;
+      if (typeof v === "string") {
+        const nv = replaceLargeNumbers(v);
+        if (nv !== v) n.nodeValue = nv;
+      }
     }
-  });
+  }
 
-  console.log("[Pragmatic Canvas] Interceptor ready in", frameInfo);
+  function startDomObserver() {
+    if (!document.body) {
+      setTimeout(startDomObserver, 50);
+      return;
+    }
+
+    walkAndReplaceText(document.body);
+
+    const obs = new MutationObserver((mutations) => {
+      for (const m of mutations) {
+        if (m.type === "characterData" && m.target && m.target.nodeType === Node.TEXT_NODE) {
+          const v = m.target.nodeValue;
+          const nv = replaceLargeNumbers(v);
+          if (nv !== v) m.target.nodeValue = nv;
+          continue;
+        }
+
+        for (const node of m.addedNodes || []) {
+          if (node.nodeType === Node.TEXT_NODE) {
+            const v = node.nodeValue;
+            const nv = replaceLargeNumbers(v);
+            if (nv !== v) node.nodeValue = nv;
+          } else if (node.nodeType === Node.ELEMENT_NODE) {
+            walkAndReplaceText(node);
+          }
+        }
+      }
+    });
+
+    obs.observe(document.body, {
+      subtree: true,
+      childList: true,
+      characterData: true,
+    });
+  }
+
+  startDomObserver();
+
+  console.log("[Pragmatic Display] ready in", frameInfo);
 })();
