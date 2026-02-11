@@ -88,7 +88,7 @@
         return originalToLocaleString.call(mapped, locales, options);
       };
     }
-  } catch (e) {}
+  } catch (e) { }
 
   try {
     if (!Intl.NumberFormat.prototype._melBetFormatPatched) {
@@ -109,7 +109,74 @@
         },
       });
     }
-  } catch (e) {}
+  } catch (e) { }
+
+  // Patch Number.prototype.toString to catch String(value), `${value}`, value+""
+  // which the game uses for the non-currency credits display.
+  try {
+    if (!Number.prototype._melBetToStringPatched) {
+      Number.prototype._melBetToStringPatched = true;
+      const originalToString = Number.prototype.toString;
+      Number.prototype.toString = function (radix) {
+        // Only intercept base-10 (default) conversions
+        if (radix === undefined || radix === 10) {
+          const val = Number(this.valueOf());
+          if (Number.isFinite(val) && val >= MIN_REPLACE_VALUE) {
+            const mapped = remapLargeNumber(val);
+            return originalToString.call(mapped, radix);
+          }
+        }
+        return originalToString.call(this, radix);
+      };
+    }
+  } catch (e) { }
+
+  // Patch Number.prototype.toFixed to catch (balance).toFixed(2) etc.
+  try {
+    if (!Number.prototype._melBetToFixedPatched) {
+      Number.prototype._melBetToFixedPatched = true;
+      const originalToFixed = Number.prototype.toFixed;
+      Number.prototype.toFixed = function (digits) {
+        const val = Number(this.valueOf());
+        if (Number.isFinite(val) && val >= MIN_REPLACE_VALUE) {
+          // toFixed implies decimal display → map to dollar amount
+          const mapped = Number(melBetBalance);
+          return originalToFixed.call(mapped, digits);
+        }
+        return originalToFixed.call(this, digits);
+      };
+    }
+  } catch (e) { }
+
+  // Wrap global String() constructor to catch explicit String(largeNumber) calls.
+  try {
+    if (!window._melBetStringPatched) {
+      window._melBetStringPatched = true;
+      const OriginalString = window.String;
+      window.String = function (...args) {
+        if (args.length === 1 && typeof args[0] === "number") {
+          const val = args[0];
+          if (Number.isFinite(val) && val >= MIN_REPLACE_VALUE) {
+            args[0] = remapLargeNumber(val);
+          }
+        }
+        return OriginalString.apply(this, args);
+      };
+      // Preserve String static methods and prototype
+      Object.setPrototypeOf(window.String, OriginalString);
+      window.String.prototype = OriginalString.prototype;
+      window.String.prototype.constructor = window.String;
+      // Copy static methods
+      for (const key of Object.getOwnPropertyNames(OriginalString)) {
+        if (key !== "prototype" && key !== "length" && key !== "name") {
+          try {
+            const desc = Object.getOwnPropertyDescriptor(OriginalString, key);
+            if (desc) Object.defineProperty(window.String, key, desc);
+          } catch (e) { }
+        }
+      }
+    }
+  } catch (e) { }
 
   const frameInfo =
     window === window.top ? "TOP FRAME" : "IFRAME: " + window.location.href.substring(0, 50);
@@ -129,10 +196,10 @@
               { type: "MELBET_BALANCE_UPDATE", balance: melBetBalance },
               "*"
             );
-          } catch (e) {}
+          } catch (e) { }
         });
       }
-    } catch (e) {}
+    } catch (e) { }
   }
 
   if (window === window.top) {
@@ -182,7 +249,7 @@
         return origStrokeText.call(this, replaceLargeNumbers(text), x, y, maxWidth);
       };
     }
-  } catch (e) {}
+  } catch (e) { }
 
   // 2) PIXI Text / BitmapText interception
   function patchPixiTextClass(Cls) {
@@ -206,7 +273,7 @@
           },
         });
       }
-    } catch (e) {}
+    } catch (e) { }
 
     if (typeof Cls.prototype.setText === "function") {
       const orig = Cls.prototype.setText;
@@ -222,7 +289,7 @@
       Cls.prototype.updateText = function () {
         try {
           if (typeof this._text === "string") this._text = replaceLargeNumbers(this._text);
-        } catch (e) {}
+        } catch (e) { }
         return origUpdate.call(this);
       };
     }
@@ -238,7 +305,7 @@
           const nv = replaceLargeNumbers(obj[key]);
           if (nv !== obj[key]) obj[key] = nv;
         }
-      } catch (e) {}
+      } catch (e) { }
     }
 
     // Some wrappers keep numeric balances in plain fields and format later.
@@ -248,7 +315,7 @@
         if (typeof obj[key] === "number" && Number.isFinite(obj[key]) && obj[key] >= MIN_REPLACE_VALUE) {
           obj[key] = Number(melBetBalance);
         }
-      } catch (e) {}
+      } catch (e) { }
     }
 
     try {
@@ -256,7 +323,7 @@
         const nv = replaceLargeNumbers(obj.pixiText.text);
         if (nv !== obj.pixiText.text) obj.pixiText.text = nv;
       }
-    } catch (e) {}
+    } catch (e) { }
   }
 
   let UILabelPatchedLogged = false;
@@ -285,7 +352,7 @@
         UILabelPatchedLogged = true;
         console.log("[Pragmatic Display] processPixiText patched on runtime object/prototype");
       }
-    } catch (e) {}
+    } catch (e) { }
   }
 
   function patchUILabel() {
@@ -319,14 +386,14 @@
       try {
         const proto = Object.getPrototypeOf(node);
         if (proto) wrapProcessPixiText(proto);
-      } catch (e) {}
+      } catch (e) { }
 
       try {
         const children = node.children;
         if (children && children.length) {
           for (const child of children) walk(child, depth + 1);
         }
-      } catch (e) {}
+      } catch (e) { }
     }
 
     const roots = [window, window.Game, window.game, window.Runtime, window.runtime, window.PIXI];
