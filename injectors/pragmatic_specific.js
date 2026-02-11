@@ -8,7 +8,7 @@
 
   // Avoid touching buy/bet/win UI numbers like 2,000 / 10,000.
   // Pragmatic demo credits are typically 100,000+ (often 1,000,000).
-  const MIN_REPLACE_VALUE = 100000;
+  const MIN_REPLACE_VALUE = 30000;
 
   function formatBalance(hasDecimals, hasCurrency) {
     const v = Number(melBetBalance);
