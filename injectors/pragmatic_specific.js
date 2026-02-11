@@ -6,6 +6,49 @@
 
   let melBetBalance = 500.0; // Default, will be updated from API/messages
 
+  // Avoid touching buy/bet/win UI numbers like 2,000 / 10,000.
+  // Pragmatic demo credits are typically 100,000+ (often 1,000,000).
+  const MIN_REPLACE_VALUE = 100000;
+
+  function _formatBalanceForMatch(hasDecimals) {
+    const v = Number(melBetBalance);
+    if (!Number.isFinite(v)) return null;
+
+    if (hasDecimals) {
+      return v.toLocaleString("en-US", {
+        minimumFractionDigits: 2,
+        maximumFractionDigits: 2,
+      });
+    }
+
+    // When the game toggles to a no-currency/no-decimals view, keep it integer.
+    return Math.round(v).toLocaleString("en-US", {
+      minimumFractionDigits: 0,
+      maximumFractionDigits: 0,
+    });
+  }
+
+  function _replaceBalance(text) {
+    if (typeof text !== "string") return text;
+
+    // Matches:
+    // - $1,000,000.00
+    // - 1000000
+    // - 1,000,000
+    // - 399,998.50
+    const balanceRegex = /(\$?)(\d{1,3}(?:,\d{3})*|\d+)(?:\.(\d{2}))?/g;
+
+    return text.replace(balanceRegex, (match, dollar, whole, decimal) => {
+      const numValue = parseFloat(whole.replace(/,/g, "") + (decimal ? "." + decimal : ""));
+      if (!Number.isFinite(numValue)) return match;
+      if (numValue < MIN_REPLACE_VALUE) return match;
+
+      const replacement = _formatBalanceForMatch(Boolean(decimal));
+      if (!replacement) return match;
+      return (dollar || "") + replacement;
+    });
+  }
+
   // Identify which frame we're in
   const frameInfo =
     window === window.top ? "TOP FRAME" : "IFRAME: " + window.location.href.substring(0, 50);
@@ -53,38 +96,12 @@
 
       const originalFillText = context.fillText.bind(context);
       context.fillText = function (text, x, y, maxWidth) {
-        let modifiedText = text;
-
-        if (typeof text === "string") {
-          const balanceRegex = /(\$?)(\d{1,3}(?:,\d{3})*|\d+)\.(\d{2})/g;
-          modifiedText = text.replace(balanceRegex, (match, dollar, whole, decimal) => {
-            const numValue = parseFloat(whole.replace(/,/g, "") + "." + decimal);
-            if (numValue > 5000) {
-              return dollar + melBetBalance.toFixed(2);
-            }
-            return match;
-          });
-        }
-
-        return originalFillText(modifiedText, x, y, maxWidth);
+        return originalFillText(_replaceBalance(text), x, y, maxWidth);
       };
 
       const originalStrokeText = context.strokeText.bind(context);
       context.strokeText = function (text, x, y, maxWidth) {
-        let modifiedText = text;
-
-        if (typeof text === "string") {
-          const balanceRegex = /(\$?)(\d{1,3}(?:,\d{3})*|\d+)\.(\d{2})/g;
-          modifiedText = text.replace(balanceRegex, (match, dollar, whole, decimal) => {
-            const numValue = parseFloat(whole.replace(/,/g, "") + "." + decimal);
-            if (numValue > 5000) {
-              return dollar + melBetBalance.toFixed(2);
-            }
-            return match;
-          });
-        }
-
-        return originalStrokeText(modifiedText, x, y, maxWidth);
+        return originalStrokeText(_replaceBalance(text), x, y, maxWidth);
       };
     }
 
@@ -97,33 +114,11 @@
   const origStrokeText = proto.strokeText;
 
   proto.fillText = function (text, x, y, maxWidth) {
-    let modifiedText = text;
-    if (typeof text === "string") {
-      const balanceRegex = /(\$?)(\d{1,3}(?:,\d{3})*|\d+)\.(\d{2})/g;
-      modifiedText = text.replace(balanceRegex, (match, dollar, whole, decimal) => {
-        const numValue = parseFloat(whole.replace(/,/g, "") + "." + decimal);
-        if (numValue > 5000) {
-          return dollar + melBetBalance.toFixed(2);
-        }
-        return match;
-      });
-    }
-    return origFillText.call(this, modifiedText, x, y, maxWidth);
+    return origFillText.call(this, _replaceBalance(text), x, y, maxWidth);
   };
 
   proto.strokeText = function (text, x, y, maxWidth) {
-    let modifiedText = text;
-    if (typeof text === "string") {
-      const balanceRegex = /(\$?)(\d{1,3}(?:,\d{3})*|\d+)\.(\d{2})/g;
-      modifiedText = text.replace(balanceRegex, (match, dollar, whole, decimal) => {
-        const numValue = parseFloat(whole.replace(/,/g, "") + "." + decimal);
-        if (numValue > 5000) {
-          return dollar + melBetBalance.toFixed(2);
-        }
-        return match;
-      });
-    }
-    return origStrokeText.call(this, modifiedText, x, y, maxWidth);
+    return origStrokeText.call(this, _replaceBalance(text), x, y, maxWidth);
   };
 
   // Listen for balance updates from parent frame
