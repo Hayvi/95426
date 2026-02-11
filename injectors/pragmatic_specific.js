@@ -42,7 +42,9 @@
     const re = /(\$?)(\d{1,3}(?:,\d{3})*|\d+)(?:\.(\d{2}))?/g;
 
     return text.replace(re, (match, dollar, whole, decimal) => {
-      const numValue = parseFloat(whole.replace(/,/g, "") + (decimal ? "." + decimal : ""));
+      const numValue = parseFloat(
+        whole.replace(/,/g, "") + (decimal ? "." + decimal : ""),
+      );
       if (!Number.isFinite(numValue)) return match;
       if (numValue < MIN_REPLACE_VALUE) return match;
 
@@ -66,13 +68,16 @@
     if (typeof value !== "number" || !Number.isFinite(value)) return value;
     if (value < MIN_REPLACE_VALUE) return value;
 
-    const minFd = options && typeof options.minimumFractionDigits === "number"
-      ? options.minimumFractionDigits
-      : undefined;
-    const maxFd = options && typeof options.maximumFractionDigits === "number"
-      ? options.maximumFractionDigits
-      : undefined;
-    const hasDecimals = (minFd !== undefined && minFd > 0) || (maxFd !== undefined && maxFd > 0);
+    const minFd =
+      options && typeof options.minimumFractionDigits === "number"
+        ? options.minimumFractionDigits
+        : undefined;
+    const maxFd =
+      options && typeof options.maximumFractionDigits === "number"
+        ? options.maximumFractionDigits
+        : undefined;
+    const hasDecimals =
+      (minFd !== undefined && minFd > 0) || (maxFd !== undefined && maxFd > 0);
 
     if (hasDecimals) return Number(melBetBalance);
     return Number(melBetBalance) * 10;
@@ -88,14 +93,14 @@
         return originalToLocaleString.call(mapped, locales, options);
       };
     }
-  } catch (e) { }
+  } catch (e) {}
 
   try {
     if (!Intl.NumberFormat.prototype._melBetFormatPatched) {
       Intl.NumberFormat.prototype._melBetFormatPatched = true;
       const originalFormatGetter = Object.getOwnPropertyDescriptor(
         Intl.NumberFormat.prototype,
-        "format"
+        "format",
       ).get;
       Object.defineProperty(Intl.NumberFormat.prototype, "format", {
         configurable: true,
@@ -109,7 +114,7 @@
         },
       });
     }
-  } catch (e) { }
+  } catch (e) {}
 
   // Patch Number.prototype.toString to catch String(value), `${value}`, value+""
   // which the game uses for the non-currency credits display.
@@ -129,7 +134,7 @@
         return originalToString.call(this, radix);
       };
     }
-  } catch (e) { }
+  } catch (e) {}
 
   // Patch Number.prototype.toFixed to catch (balance).toFixed(2) etc.
   try {
@@ -146,7 +151,7 @@
         return originalToFixed.call(this, digits);
       };
     }
-  } catch (e) { }
+  } catch (e) {}
 
   // Wrap global String() constructor to catch explicit String(largeNumber) calls.
   try {
@@ -172,14 +177,16 @@
           try {
             const desc = Object.getOwnPropertyDescriptor(OriginalString, key);
             if (desc) Object.defineProperty(window.String, key, desc);
-          } catch (e) { }
+          } catch (e) {}
         }
       }
     }
-  } catch (e) { }
+  } catch (e) {}
 
   const frameInfo =
-    window === window.top ? "TOP FRAME" : "IFRAME: " + window.location.href.substring(0, 50);
+    window === window.top
+      ? "TOP FRAME"
+      : "IFRAME: " + window.location.href.substring(0, 50);
   console.log("[Pragmatic Display] init in", frameInfo);
 
   // Balance source
@@ -194,12 +201,12 @@
           try {
             iframe.contentWindow.postMessage(
               { type: "MELBET_BALANCE_UPDATE", balance: melBetBalance },
-              "*"
+              "*",
             );
-          } catch (e) { }
+          } catch (e) {}
         });
       }
-    } catch (e) { }
+    } catch (e) {}
   }
 
   if (window === window.top) {
@@ -243,13 +250,25 @@
       const origFillText = proto.fillText;
       const origStrokeText = proto.strokeText;
       proto.fillText = function (text, x, y, maxWidth) {
-        return origFillText.call(this, replaceLargeNumbers(text), x, y, maxWidth);
+        return origFillText.call(
+          this,
+          replaceLargeNumbers(text),
+          x,
+          y,
+          maxWidth,
+        );
       };
       proto.strokeText = function (text, x, y, maxWidth) {
-        return origStrokeText.call(this, replaceLargeNumbers(text), x, y, maxWidth);
+        return origStrokeText.call(
+          this,
+          replaceLargeNumbers(text),
+          x,
+          y,
+          maxWidth,
+        );
       };
     }
-  } catch (e) { }
+  } catch (e) {}
 
   // 2) PIXI Text / BitmapText interception
   function patchPixiTextClass(Cls) {
@@ -259,7 +278,11 @@
 
     try {
       const desc = Object.getOwnPropertyDescriptor(Cls.prototype, "text");
-      if (desc && typeof desc.set === "function" && typeof desc.get === "function") {
+      if (
+        desc &&
+        typeof desc.set === "function" &&
+        typeof desc.get === "function"
+      ) {
         Object.defineProperty(Cls.prototype, "text", {
           configurable: true,
           enumerable: desc.enumerable,
@@ -273,7 +296,7 @@
           },
         });
       }
-    } catch (e) { }
+    } catch (e) {}
 
     if (typeof Cls.prototype.setText === "function") {
       const orig = Cls.prototype.setText;
@@ -288,8 +311,9 @@
       const origUpdate = Cls.prototype.updateText;
       Cls.prototype.updateText = function () {
         try {
-          if (typeof this._text === "string") this._text = replaceLargeNumbers(this._text);
-        } catch (e) { }
+          if (typeof this._text === "string")
+            this._text = replaceLargeNumbers(this._text);
+        } catch (e) {}
         return origUpdate.call(this);
       };
     }
@@ -298,24 +322,41 @@
   function rewriteKnownStringProps(obj) {
     if (!obj || typeof obj !== "object") return;
 
-    const textKeys = ["text", "_text", "label", "value", "displayText", "content"];
+    const textKeys = [
+      "text",
+      "_text",
+      "label",
+      "value",
+      "displayText",
+      "content",
+    ];
     for (const key of textKeys) {
       try {
         if (typeof obj[key] === "string") {
           const nv = replaceLargeNumbers(obj[key]);
           if (nv !== obj[key]) obj[key] = nv;
         }
-      } catch (e) { }
+      } catch (e) {}
     }
 
     // Some wrappers keep numeric balances in plain fields and format later.
-    const numericKeys = ["balance", "credit", "currentBalance", "displayBalance", "walletBalance"];
+    const numericKeys = [
+      "balance",
+      "credit",
+      "currentBalance",
+      "displayBalance",
+      "walletBalance",
+    ];
     for (const key of numericKeys) {
       try {
-        if (typeof obj[key] === "number" && Number.isFinite(obj[key]) && obj[key] >= MIN_REPLACE_VALUE) {
+        if (
+          typeof obj[key] === "number" &&
+          Number.isFinite(obj[key]) &&
+          obj[key] >= MIN_REPLACE_VALUE
+        ) {
           obj[key] = Number(melBetBalance);
         }
-      } catch (e) { }
+      } catch (e) {}
     }
 
     try {
@@ -323,7 +364,7 @@
         const nv = replaceLargeNumbers(obj.pixiText.text);
         if (nv !== obj.pixiText.text) obj.pixiText.text = nv;
       }
-    } catch (e) { }
+    } catch (e) {}
   }
 
   let UILabelPatchedLogged = false;
@@ -350,9 +391,11 @@
 
       if (!UILabelPatchedLogged) {
         UILabelPatchedLogged = true;
-        console.log("[Pragmatic Display] processPixiText patched on runtime object/prototype");
+        console.log(
+          "[Pragmatic Display] processPixiText patched on runtime object/prototype",
+        );
       }
-    } catch (e) { }
+    } catch (e) {}
   }
 
   function patchUILabel() {
@@ -367,36 +410,86 @@
 
     patchPixiTextClass(PIXI.Text);
     patchPixiTextClass(PIXI.BitmapText);
-    if (PIXI.extras && PIXI.extras.BitmapText) patchPixiTextClass(PIXI.extras.BitmapText);
+    if (PIXI.extras && PIXI.extras.BitmapText)
+      patchPixiTextClass(PIXI.extras.BitmapText);
     patchUILabel();
   }
 
   // 3) Live sweep of scene objects to catch custom wrappers that bypass setters.
   function sweepPIXIObjects() {
     const visited = new Set();
+    const buyFeatureTextRe = /BUY\s*(SUPER\s*)?FREE\s*SPINS/i;
+
+    function hidePixiBuyFeaturePanel(node) {
+      if (!node || typeof node !== "object") return;
+      let matched = false;
+      const textKeys = [
+        "text",
+        "_text",
+        "label",
+        "value",
+        "displayText",
+        "content",
+      ];
+      for (const key of textKeys) {
+        try {
+          const v = node[key];
+          if (typeof v === "string" && buyFeatureTextRe.test(v)) {
+            matched = true;
+            break;
+          }
+        } catch (e) {}
+      }
+      if (!matched) return;
+
+      // Hide ancestor panel so the buy feature card is fully removed.
+      let panel = node;
+      for (let i = 0; i < 5; i++) {
+        try {
+          if (!panel.parent) break;
+          panel = panel.parent;
+        } catch (e) {
+          break;
+        }
+      }
+      try {
+        panel.visible = false;
+        panel.renderable = false;
+        panel.alpha = 0;
+      } catch (e) {}
+    }
 
     function walk(node, depth) {
-      if (!node || typeof node !== "object" || depth > 9 || visited.has(node)) return;
+      if (!node || typeof node !== "object" || depth > 9 || visited.has(node))
+        return;
       visited.add(node);
 
       rewriteKnownStringProps(node);
 
       // Patch runtime instance methods/prototypes even when class is not global.
       wrapProcessPixiText(node);
+      hidePixiBuyFeaturePanel(node);
       try {
         const proto = Object.getPrototypeOf(node);
         if (proto) wrapProcessPixiText(proto);
-      } catch (e) { }
+      } catch (e) {}
 
       try {
         const children = node.children;
         if (children && children.length) {
           for (const child of children) walk(child, depth + 1);
         }
-      } catch (e) { }
+      } catch (e) {}
     }
 
-    const roots = [window, window.Game, window.game, window.Runtime, window.runtime, window.PIXI];
+    const roots = [
+      window,
+      window.Game,
+      window.game,
+      window.Runtime,
+      window.runtime,
+      window.PIXI,
+    ];
     for (const root of roots) walk(root, 0);
   }
 
@@ -404,7 +497,167 @@
   setInterval(tryPatchPIXI, 300);
   setInterval(sweepPIXIObjects, 120);
 
-  // 4) DOM text interception (for any HTML overlays)
+  // 4) Block user interaction on Buy Feature button area (left panel top section).
+  function blockBuyFeatureClicks() {
+    if (window._melBetBuyFeatureBlockersMounted) return;
+    const host = document.body || document.documentElement;
+    if (!host) {
+      setTimeout(blockBuyFeatureClicks, 50);
+      return;
+    }
+
+    function findMainSurface() {
+      const surfaces = [
+        ...Array.from(document.querySelectorAll("canvas")),
+        ...Array.from(document.querySelectorAll("iframe")),
+      ];
+      let best = null;
+      let bestArea = 0;
+      for (const el of surfaces) {
+        const r = el.getBoundingClientRect();
+        if (!r || r.width < 10 || r.height < 10) continue;
+        const area = r.width * r.height;
+        if (area > bestArea) {
+          bestArea = area;
+          best = el;
+        }
+      }
+      return best;
+    }
+
+    function makeBlocker() {
+      const el = document.createElement("div");
+      el.style.position = "fixed";
+      el.style.left = "-10000px";
+      el.style.top = "-10000px";
+      el.style.width = "1px";
+      el.style.height = "1px";
+      el.style.pointerEvents = "auto";
+      el.style.background = "transparent";
+      el.style.zIndex = "2147483647";
+
+      const swallow = (e) => {
+        e.preventDefault();
+        e.stopPropagation();
+        if (typeof e.stopImmediatePropagation === "function")
+          e.stopImmediatePropagation();
+      };
+      el.addEventListener("pointerdown", swallow, true);
+      el.addEventListener("pointerup", swallow, true);
+      el.addEventListener("mousedown", swallow, true);
+      el.addEventListener("mouseup", swallow, true);
+      el.addEventListener("touchstart", swallow, {
+        capture: true,
+        passive: false,
+      });
+      el.addEventListener("touchend", swallow, {
+        capture: true,
+        passive: false,
+      });
+      el.addEventListener("click", swallow, true);
+      host.appendChild(el);
+      return el;
+    }
+
+    const blockerA = makeBlocker();
+    const blockerB = makeBlocker();
+    const blockerC = makeBlocker();
+    const blockerD = makeBlocker();
+    window._melBetBuyFeatureBlockersMounted = true;
+
+    // Normalized zones inside main game surface (with generous overlap/margins).
+    const zones = [
+      { x1: 0.0, x2: 0.34, y1: 0.0, y2: 0.34 }, // BUY FREE SPINS (oversized)
+      { x1: 0.0, x2: 0.34, y1: 0.16, y2: 0.54 }, // BUY SUPER FREE SPINS (oversized)
+      { x1: 0.0, x2: 0.34, y1: 0.36, y2: 0.8 }, // DOUBLE CHANCE panel/toggle (oversized)
+      { x1: 0.0, x2: 0.36, y1: 0.0, y2: 0.82 }, // full left control-column kill zone
+    ];
+
+    function placeBlocker(el, rect, z) {
+      const x = rect.left + rect.width * z.x1;
+      const y = rect.top + rect.height * z.y1;
+      const w = rect.width * (z.x2 - z.x1);
+      const h = rect.height * (z.y2 - z.y1);
+      el.style.left = `${x}px`;
+      el.style.top = `${y}px`;
+      el.style.width = `${w}px`;
+      el.style.height = `${h}px`;
+    }
+
+    function tick() {
+      const surface = findMainSurface();
+      if (!surface) {
+        requestAnimationFrame(tick);
+        return;
+      }
+      const rect = surface.getBoundingClientRect();
+      placeBlocker(blockerA, rect, zones[0]);
+      placeBlocker(blockerB, rect, zones[1]);
+      placeBlocker(blockerC, rect, zones[2]);
+      placeBlocker(blockerD, rect, zones[3]);
+      requestAnimationFrame(tick);
+    }
+
+    requestAnimationFrame(tick);
+
+    // Fallback: frame-viewport guard for left buy panel area.
+    // This catches cases where game input is handled in nested surfaces/iframes.
+    const frameZones = [{ x1: 0.0, x2: 0.42, y1: 0.0, y2: 0.9 }];
+
+    function inFrameZone(clientX, clientY) {
+      const w = Math.max(1, window.innerWidth || 1);
+      const h = Math.max(1, window.innerHeight || 1);
+      const nx = clientX / w;
+      const ny = clientY / h;
+      return frameZones.some(
+        (z) => nx >= z.x1 && nx <= z.x2 && ny >= z.y1 && ny <= z.y2,
+      );
+    }
+
+    function stopLeftPanelInput(e) {
+      const p = e.touches && e.touches[0] ? e.touches[0] : e;
+      if (!p || typeof p.clientX !== "number" || typeof p.clientY !== "number")
+        return;
+      if (!inFrameZone(p.clientX, p.clientY)) return;
+      e.preventDefault();
+      e.stopPropagation();
+      if (typeof e.stopImmediatePropagation === "function")
+        e.stopImmediatePropagation();
+    }
+
+    window.addEventListener("pointerdown", stopLeftPanelInput, true);
+    window.addEventListener("mousedown", stopLeftPanelInput, true);
+    window.addEventListener("touchstart", stopLeftPanelInput, {
+      capture: true,
+      passive: false,
+    });
+    window.addEventListener("click", stopLeftPanelInput, true);
+  }
+
+  setTimeout(blockBuyFeatureClicks, 50);
+
+  // 5) DOM text interception (for any HTML overlays)
+  const buyFeatureTextRe = /BUY\s*(SUPER\s*)?FREE\s*SPINS/i;
+
+  function hideDomBuyFeaturePanels(root) {
+    const scope = root && root.nodeType === Node.ELEMENT_NODE ? root : document;
+    const all = scope.querySelectorAll ? scope.querySelectorAll("*") : [];
+    for (const el of all) {
+      try {
+        const txt = el.textContent;
+        if (!txt || !buyFeatureTextRe.test(txt)) continue;
+
+        // Hide nearest wrapper so button/card/background all disappear.
+        let wrapper = el;
+        for (let i = 0; i < 4; i++) {
+          if (!wrapper.parentElement) break;
+          wrapper = wrapper.parentElement;
+        }
+        wrapper.style.setProperty("display", "none", "important");
+      } catch (e) {}
+    }
+  }
+
   function walkAndReplaceText(root) {
     if (!root) return;
     const walker = document.createTreeWalker(root, NodeFilter.SHOW_TEXT);
@@ -425,10 +678,15 @@
     }
 
     walkAndReplaceText(document.body);
+    hideDomBuyFeaturePanels(document.body);
 
     const obs = new MutationObserver((mutations) => {
       for (const m of mutations) {
-        if (m.type === "characterData" && m.target && m.target.nodeType === Node.TEXT_NODE) {
+        if (
+          m.type === "characterData" &&
+          m.target &&
+          m.target.nodeType === Node.TEXT_NODE
+        ) {
           const v = m.target.nodeValue;
           const nv = replaceLargeNumbers(v);
           if (nv !== v) m.target.nodeValue = nv;
@@ -442,6 +700,7 @@
             if (nv !== v) node.nodeValue = nv;
           } else if (node.nodeType === Node.ELEMENT_NODE) {
             walkAndReplaceText(node);
+            hideDomBuyFeaturePanels(node);
           }
         }
       }

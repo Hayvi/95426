@@ -9,6 +9,7 @@ A standalone launcher for Sweet Bonanza 1000 (Game ID: 95426) with virtual walle
 - 🔄 Real-time balance sync - wins/losses update the virtual wallet
 - 🎯 Dual-mode interception: Supports both currency (e.g., $500.00) and credits (e.g., 5,000) display modes
 - ⚡ Advanced interception: Covers `toLocaleString`, `toString()`, `toFixed()`, and `String()` to catch ALL balance display paths
+- 🚫 Buy-feature guard: blocks interaction with the left-side buy/free-spins controls (including edge-click leakage handling)
 
 ## Installation
 
@@ -69,7 +70,10 @@ In proxy mode, the launcher injects scripts into proxied HTML responses. This al
 
 Only large "balance-like" values (>= 30,000 in internal game units) are replaced to preserve game UI elements like bet amounts, buy prices, and small wins. When the game toggles to "Credit" mode, the interceptor automatically applies the appropriate multiplier (typically 10x) to match the game's credit display logic.
 
+The Pragmatic injector also installs layered click/touch guards over the left control column (buy free spins / buy super free spins / double chance panel). This is implemented as a runtime overlay + capture-phase input guard to prevent buy-feature activation across canvas/iframe rendering variants.
+
 ## Troubleshooting
 
 - If you see `ERR_SSL_PROTOCOL_ERROR` requests to `https://127.0.0.1:<port>/...`, upgrade to the latest version of this launcher (it rewrites those back through the proxy).
 - If the game shows a “connection lost” screen, open DevTools Console inside the game iframe and look for failing network calls under `/p/<token>/...` (some upstream endpoints may block proxied access).
+- If the left-side buy panel is still clickable, fully restart the launcher process and hard refresh the page (`Ctrl+Shift+R`) to reload the latest injected script.
